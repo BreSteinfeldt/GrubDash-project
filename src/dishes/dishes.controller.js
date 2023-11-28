@@ -22,18 +22,18 @@ function validatorFor(propertyName) {
   };
 }
 
-// function validatorForPrice(req, res, next) {
-//   const { price } = data;
+function validatorForPrice(req, res, next) {
+  const { price } = req.body.data;
 
-//   if (typeof price !== "number" || price <= 0) {
-//     return next({
-//       status: 400,
-//       message: "Dish must have a price that is an integer greater than 0",
-//     });
-//   } else {
-//     next();
-//   }
-// }
+  if (typeof price !== "number" || price <= 0) {
+    next({
+      status: 400,
+      message: "Dish must have a price that is an integer greater than 0",
+    });
+  } else {
+    next();
+  }
+}
 
 function validateBodyDataExists(req, res, next) {
   if (req.body.data) {
@@ -48,7 +48,7 @@ function validateBodyDataExists(req, res, next) {
 
 function create(req, res, next) {
   let newDish = {
-    id: nextId,
+    id: nextId(),
     name: req.body.data.name,
     description: req.body.data.description,
     price: req.body.data.price,
@@ -78,18 +78,25 @@ function read(req, res, next) {
 }
 
 function update(req, res, next) {
-  const dish = res.locals.index;
+  const dishIndex = res.locals.index;
   const {
     data: { id, name, description, price, image_url },
   } = req.body;
 
-  dish.id = id;
-  dish.name = name;
-  dish.description = description;
-  dish.price = price;
-  dish.image_url = image_url;
+  if (id && id !== req.params.dishId) {
+    next({
+      status: 400,
+      message: `Dish id ${id} does not match dish id ${req.params.dishId}`,
+    });
+  } else {
+    dishes[dishIndex].id = id;
+    dishes[dishIndex].name = name;
+    dishes[dishIndex].description = description;
+    dishes[dishIndex].price = price;
+    dishes[dishIndex].image_url = image_url;
 
-  res.json({ data: dish });
+    res.json({ data: dishes[dishIndex] });
+  }
 }
 
 module.exports = {
@@ -100,16 +107,18 @@ module.exports = {
     validatorFor("description"),
     validatorFor("price"),
     validatorFor("image_url"),
+    validatorForPrice,
     create,
   ],
   read: [dishExists, read],
   update: [
+    dishExists,
     validateBodyDataExists,
-    validatorFor("id"),
     validatorFor("name"),
     validatorFor("description"),
     validatorFor("price"),
     validatorFor("image_url"),
+    validatorForPrice,
     update,
   ],
 };

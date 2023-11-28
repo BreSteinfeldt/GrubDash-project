@@ -34,7 +34,7 @@ function validateBodyDataExists(req, res, next) {
 }
 
 function dishesArrayValidator(req, res, next) {
-  const { dishes } = data;
+  const { dishes } = req.body.data;
 
   if (!Array.isArray(dishes) || dishes.length <= 0) {
     return next({
@@ -47,12 +47,12 @@ function dishesArrayValidator(req, res, next) {
 }
 
 function dishesQuantityValidator(req, res, next) {
-  const { dishes } = data;
+  const { dishes } = req.body.data;
   dishes.forEach((dish, index) => {
     if (
       !dish.quantity ||
       dish.quantity <= 0 ||
-      typeof dish.quantity != "number"
+      typeof dish.quantity !== "number"
     ) {
       return next({
         status: 400,
@@ -60,11 +60,12 @@ function dishesQuantityValidator(req, res, next) {
       });
     }
   });
+  next(); 
 }
 
 function create(req, res, next) {
   let newOrder = {
-    id: nextId,
+    id: nextId(),
     deliverTo: req.body.data.deliverTo,
     mobileNumber: req.body.data.mobileNumber,
     status: req.body.data.status,
@@ -74,14 +75,101 @@ function create(req, res, next) {
   res.status(201).send({ data: newOrder });
 }
 
+function orderExists(req, res, next) {
+  const { orderId } = req.params;
+  let index = orders.findIndex((order) => order.id === orderId);
+
+  if (index < 0) {
+    next({
+      status: 404,
+      message: `Order does not exist: ${orderId}`,
+    });
+  } else {
+    res.locals.index = index;
+    next();
+  }
+}
+
+function read(req, res, next) {
+  res.send({ data: orders[res.locals.index] });
+}
+
+function validateStatusForUpdate(req, res, next) {
+  const { status } = req.body.data;
+  if (status == "delivered" || status == "invalid") {
+    return next({
+      status: 400,
+      message: `An order with status: "delivered" cannot be changed.`,
+    });
+  } else {
+    next();
+  }
+}
+
+function update(req, res, next) {
+  const orderIndex = res.locals.index;
+  const {
+    data: { id, deliverTo, mobileNumber, status, dishes },
+  } = req.body;
+
+  if (id && id !== req.params.orderId) {
+    next({
+      status: 400,
+      message: `Order id does not match route id. Order: ${id}, Route: ${req.params.orderId}`,
+    });
+  } else {
+    orders[orderIndex].deliverTo = deliverTo;
+    orders[orderIndex].mobileNumber = mobileNumber;
+    orders[orderIndex].status = status;
+    orders[orderIndex].dishes = dishes;
+    res.json({ data: orders[orderIndex] });
+  }
+}
+
+function destroyValidator(req, res, next) {
+  const { status } = orders[res.locals.index];
+
+  if (status !== "pending") {
+    return next({
+      status: 400,
+      message: `An order cannot be deleted unless it is pending.`,
+    });
+  } else {
+    next();
+  }
+}
+
+function destroy(req, res, next) {
+  const orderId = req.params;
+  const index = orders.findIndex((order) => order.id === orderId);
+
+  orders.splice(index, 1);
+  res.sendStatus(204);
+}
+
 module.exports = {
   list,
   create: [
-validateBodyDataExists,   
-validatorFor("deliverTo"), 
-validatorFor("mobileNumber"),
-validatorFor("dishes"), 
-dishesArrayValidator, 
-dishesQuantityValidator,
-create]
+    validateBodyDataExists,
+    validatorFor("deliverTo"),
+    validatorFor("mobileNumber"),
+    validatorFor("dishes"),
+    dishesArrayValidator,
+    dishesQuantityValidator,
+    create,
+  ],
+  read: [orderExists, read],
+  update: [
+    orderExists,
+    validateBodyDataExists,
+    validatorFor("deliverTo"),
+    validatorFor("mobileNumber"),
+    validatorFor("dishes"),
+    validatorFor("status"),
+    dishesArrayValidator,
+    dishesQuantityValidator,
+    validateStatusForUpdate,
+    update,
+  ],
+  delete: [orderExists, destroyValidator, destroy],
 };
